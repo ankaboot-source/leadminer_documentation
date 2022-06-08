@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>utils/regexpUtils.js - Documentation</title>
+    <title>controllers/google.controller.js - Documentation</title>
 
     <script src="scripts/prettify/prettify.js"></script>
     <script src="scripts/prettify/lang-css.js"></script>
@@ -29,7 +29,7 @@
 
 <div id="main">
     
-    <h1 class="page-title">utils/regexpUtils.js</h1>
+    <h1 class="page-title">controllers/google.controller.js</h1>
     
 
     
@@ -39,72 +39,146 @@
     
     <section>
         <article>
-            <pre class="prettyprint source linenums"><code>const quotedPrintable = require("quoted-printable");
-/* eslint-disable */
-const regex = new RegExp(
-  /((?&lt;name>[\p{L}\p{M}.\p{L}\p{M}\w\W]{1,})\s)*(&lt;|\[)*(?&lt;address>[A-Za-z0-9!#$%&amp;+?^_`{|\}~-]+(?:\.[A-Za-z0-9!#$%&amp;'*+=?^_`\{|\}~-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)(>|\])*/imu
-);
-/* eslint-disable */
-const regexForBody = new RegExp(
-  /((?:[A-Za-z])[A-Za-z&amp;^_`{|\}~-]+(?:\.[A-Za-z0-9&amp;_`\{|\}~-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)/gimu
-);
+            <pre class="prettyprint source linenums"><code>/* istanbul ignore file */
+var { google } = require("googleapis");
+var OAuth2 = google.auth.OAuth2;
+const db = require("../models");
+const googleUsers = db.googleUsers;
+const logger = require("../utils/logger")(module);
 
-/**
- * Extract Emails from body.
- * @param  {string} data A string that represents the mail body
- * @returns {Array} array of strings
- */
-function extractEmailsFromBody(data) {
-  let reg = quotedPrintable.decode(data).match(regexForBody);
-  /* istanbul ignore else */
-  if (reg) {
-    return reg;
-  }
+const ClientId = process.env.GG_CLIENT_ID;
+const ClientSecret = process.env.GG_CLIENT_SECRET;
+const RedirectionUrl = "postmessage";
+
+// returns Oauth client
+function getOAuthClient() {
+  return new OAuth2(ClientId, ClientSecret, RedirectionUrl);
 }
-
 /**
- * Using regEx extract emails addresses and users names if available.
- * @param  {object} data
+ * Uses the authorization code to retrieve tokens
+ * then create a record in the database if valid user infos
+ * @param  {} req
+ * @param  {} res
  */
-function extractNameAndEmail(data) {
-  const getRegExp = (emailAfterRegEx) => {
-    /* istanbul ignore else */
-    if (emailAfterRegEx &amp;&amp; emailAfterRegEx.groups.address.includes("@")) {
-      if (!emailAfterRegEx.groups.name) {
-        emailAfterRegEx.groups.name = "";
-      }
-      return emailAfterRegEx.groups;
-    }
-  };
-  let email = data[0].split(",");
-  if (email[1]) {
-    let dataWithManyEmails = email.map((emails) => {
-      let result = getRegExp(regex.exec(emails.trim()));
-      return result;
-    });
-    return dataWithManyEmails;
+exports.SignUpWithGoogle = async (req, res) => {
+  let oauth2Client = getOAuthClient();
+  // the query param authorization code
+  let code = "";
+
+  if (req.body.authCode) {
+    code = req.body.authCode;
   } else {
-    let result = getRegExp(regex.exec(email));
-    return [result];
-  }
-}
-/**
- * Change extracted body email into {name,address} format
- * @param  {Array} data array of emails objects
- * @returns {Array} formated array of object
- */
-function FormatBodyEmail(data) {
-  /* istanbul ignore else */
-  if (data) {
-    return data.map((oneEmail) => {
-      return { name: "", address: oneEmail };
+    res.status(400).send({
+      error: "No valid authorization code !",
     });
+    return;
   }
+  // use authCode to retrieve tokens
+  oauth2Client.getToken(code, async function (err, tokens) {
+    console.log(tokens);
+    if (tokens) {
+      let googleUser = {};
+      // oauthclient to use the access_token
+      oauth2Client.setCredentials({
+        access_token: tokens.access_token,
+      });
+      var oauth2 = google.oauth2({
+        auth: oauth2Client,
+        version: "v2",
+      });
+      // get user infos( email, id, photo...)
+      let response = await oauth2.userinfo.get({});
+      let tokenInfo = await oauth2Client.getTokenInfo(tokens.access_token);
+      googleUser.email = response.data.email;
+      googleUser.id = response.data.id;
+      googleUser.refreshToken = tokens.refresh_token;
+
+      if (googleUser.id) {
+        googleUsers
+          .findOne({ where: { id: googleUser.id } })
+          .then((google_user) => {
+            if (google_user === null) {
+              // Save googleUsers in the database
+              googleUsers
+                .create(googleUser)
+                .then((data) => {
+                  res.status(200).send({
+                    googleUser: {
+                      email: googleUser.email,
+                      id: googleUser.id,
+                      access_token: {
+                        access_token: tokens.access_token,
+                        experation: tokenInfo.exp,
+                      },
+                    },
+                  });
+                })
+                .catch((err) => {
+                  logger.error(
+                    `can't create account with for user Error : ${err}`
+                  );
+                  res.status(500).send({
+                    error:
+                      "Some error occurred while creating your account your account.",
+                  });
+                });
+            } else {
+              logger.info(
+                `On signUp With Google : Account with id: ${googleUser.id} already exist`
+              );
+              // case when user id exists
+              res.status(200).send({
+                message: "Your account already exists !",
+                googleUser: {
+                  email: google_user.email,
+                  id: google_user.id,
+                  access_token: {
+                    access_token: tokens.access_token,
+                    experation: tokenInfo.exp,
+                  },
+                },
+              });
+            }
+          });
+      }
+    } else {
+      // erro with authorization code
+      res.status(400).send({
+        error: `Can't authenticate using google account, reason : ${err}`,
+      });
+      return;
+    }
+  });
+};
+/**
+ * Uses the refresh_token to refresh the expired access_token
+ * @param  {} refresh_token stored token
+ */
+async function refreshAccessToken(refresh_token) {
+  return new Promise((resolve, reject) => {
+    let tokenInfo = {};
+    let access_token;
+    // return OAuth2 client
+    function getOAuthClient() {
+      return new OAuth2(ClientId, ClientSecret, RedirectionUrl);
+    }
+    let oauth2Client = getOAuthClient();
+    oauth2Client.setCredentials({
+      refresh_token: refresh_token,
+    });
+    return oauth2Client.getAccessToken(async (err, token) => {
+      tokenInfo = await oauth2Client.getTokenInfo(token);
+
+      access_token = {
+        access_token: token,
+        experation: Math.floor(tokenInfo.expiry_date / 1000),
+      };
+      resolve(access_token);
+    });
+  });
 }
 
-exports.extractNameAndEmail = extractNameAndEmail;
-exports.extractEmailsFromBody = extractEmailsFromBody;
-exports.FormatBodyEmail = FormatBodyEmail;
+exports.refreshAccessToken = refreshAccessToken;
 </code></pre>
         </article>
     </section>
