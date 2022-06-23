@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Home - Documentation</title>
+    <title>services/EmailMessage.js - Documentation</title>
 
     <script src="scripts/prettify/prettify.js"></script>
     <script src="scripts/prettify/lang-css.js"></script>
@@ -29,50 +29,223 @@
 
 <div id="main">
     
+    <h1 class="page-title">services/EmailMessage.js</h1>
+    
 
     
 
 
 
     
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>const regExHelpers = require('../utils/regexpUtils');
+const dateHelpers = require('../utils/dateHelpers');
+const NEWSLETTER_HEADER_FIELDS = process.env.NEWSLETTER;
+const TRANSACTIONAL_HEADER_FIELDS = process.env.TRANSACTIONAL;
+const CAMPAIGN_HEADER_FIELDS = process.env.CAMPAIGN;
+const FIELDS = ['to', 'from', 'cc', 'bcc', 'reply-to'];
 
+class EmailMessage {
+  /**
+   * The constructor function is a function that is called when a new object is created.
+   * @param sequentialId - The sequential id of the message.
+   * @param header - This is a JSON object that contains the header information for the message.
+   * @param body - The body of the message.
+   */
+  constructor(sequentialId, size, header, body, user) {
+    this.sequentialId = sequentialId;
+    this.size = size;
+    this.header = header || {};
+    this.body = body || {};
+    this.user = user;
+  }
+  /**
+   * If the header contains any of the fields in the NEWSLETTER_HEADER_FIELDS array, then return true
+   * @returns True or False
+   */
+  isNewsletter() {
+    return Object.keys(this.header).some((headerField) => {
+      NEWSLETTER_HEADER_FIELDS.includes(headerField.toLowerCase());
+    });
+  }
+  isEmailConnection() {}
+  /**
+   * It returns true if the email is transactional, and false if it's not
+   * @returns A boolean value.
+   */
+  isTransactional() {
+    return Object.keys(this.header).some((headerField) => {
+      TRANSACTIONAL_HEADER_FIELDS.includes(headerField.toLowerCase());
+    });
+  }
+  /**
+   * If the header object has a key called "references", then return 1, otherwise return 0
+   * @returns The function isInConversation() is returning a boolean value.
+   */
+  isInConversation() {
+    if (Object.keys(this.header).includes('references')) {
+      return 1;
+    } else {
+      return 0;
+    }
+  }
+  getEmailType() {
+    const type = [];
+    if (this.isNewsletter()) {
+      type.push('Newsletter');
+    }
+    if (this.isTransactional()) {
+      type.push('Transactional');
+    }
+    return type;
+    //if(this.is)
+  }
+  isInvitation() {}
+  hasAttachement() {}
+  getSenderIp() {}
+  /**
+   * It takes a metaDataProps object as an argument, and returns the value of the "date" property of that
+   * object
+   * @param metaDataProps - This is the metadata object that is passed to the function.
+   * @returns The date of the article.
+   */
+  getDate() {
+    return dateHelpers.parseDate(this.header?.date?.[0] ?? '');
+  }
+  /**
+   * It returns an object with only the messaging fields from the header
+   * @returns An object with only the messaging fields from the header.
+   */
+  getMessagingFieldsOnly() {
+    const messagingProps = {};
+    Object.keys(this.header).map((key) => {
+      if (FIELDS.includes(key)) {
+        messagingProps[key] = this.header[key][0];
+      }
+    });
+    return messagingProps;
+  }
+  /**
+   * It takes the header object and returns an object with all the properties that are not in the FIELDS
+   * array
+   * @returns An object with all the metadata fields that are not in the FIELDS array.
+   */
+  getOtherMetaDataFields() {
+    const metaDataProps = {};
+    Object.keys(this.header).map((key) => {
+      if (!FIELDS.includes(key)) {
+        metaDataProps[key] = this.header[key][0];
+      }
+    });
+    return metaDataProps;
+  }
+  /**
+   * It returns the message-id of the email
+   * @returns The message-id of the email.
+   */
+  getMessageId() {
+    if (this.header['message-id']) {
+      return this.header['message-id'][0];
+    }
+  }
 
-
-
-
-
-
-
-
-    
-
-
-    <section class="readme">
-        <article><p><a href="https://github.com/ankaboot-source/leadminer/actions/workflows/Deploy.yml"><img src="https://github.com/ankaboot-source/leadminer/actions/workflows/Deploy.yml/badge.svg?branch=main" alt="Build &amp; Deploy"></a></p>
-<h1>Leadminer</h1>
-<p>Leadminer is a NodeJS app to extract and qualify email addresses from your own mailboxes.</p>
-<h2>Installation</h2>
-<p>Use <a href="https://pip.pypa.io/en/stable/">app</a> to install leadminer.</p>
-<pre class="prettyprint source lang-bash"><code>command line installation
+  /**
+   * It takes in an object of messaging fields and metadata properties, and returns an array of email
+   * objects
+   * @param messagingFields - an object with the keys being the messaging fields and the values being the
+   * values of those fields.
+   * @param metaDataProps - This is the metadata object that is passed to the function.
+   * @returns An array of objects.
+   */
+  getEmailsObjectsFromHeader(messagingFields, metaDataProps) {
+    const emailsObjects = [];
+    Object.keys(messagingFields).map((key) => {
+      const emails = regExHelpers.extractNameAndEmail(messagingFields[key]);
+      if (emails) {
+        emails.map((email) => {
+          if (email) {
+            if (email.address) {
+              const emailObject = {};
+              emailObject['userID'] = this.user.id;
+              emailObject['messageId'] = [this.getMessageId()];
+              emailObject['address'] = email.address;
+              emailObject['name'] = email.name;
+              emailObject['fields'] = {};
+              emailObject['fields'][key] = 1;
+              emailObject['date'] = this.getDate();
+              emailObject['type'] = this.getEmailType();
+              emailObject['engagement'] = this.isInConversation();
+              emailsObjects.push(emailObject);
+            }
+          }
+        });
+      }
+    });
+    return emailsObjects;
+  }
+  /**
+   * It takes the body of an email, extracts the email addresses from it, and returns an array of objects
+   * that contain the email addresses and other information about the email
+   * @returns An array of objects.
+   */
+  getEmailsObjectsFromBody() {
+    const emailsObjects = [];
+    const emailObject = {};
+    const emails = regExHelpers.extractNameAndEmailFromBody(this.body);
+    if (emails) {
+      emails.map((email) => {
+        if (email) {
+          emailObject['userID'] = this.user.id;
+          emailObject['messageId'] = [this.getMessageId()];
+          emailObject['address'] = email;
+          emailObject['name'] = '';
+          emailObject['fields'] = {};
+          emailObject['fields']['body'] = 1;
+          emailObject['date'] = this.getDate();
+          emailObject['type'] = this.getEmailType();
+          emailObject['engagement'] = this.isInConversation();
+          emailsObjects.push(emailObject);
+        }
+      });
+    }
+    return emailsObjects;
+  }
+  /**
+   * It takes the header, extracts the messaging fields, extracts the other metadata fields, and then
+   * returns an array of objects that contain the email addresses and the metadata fields
+   * @returns An array of objects.
+   */
+  extractEmailObjectsFromHeader() {
+    const messagingFields = this.getMessagingFieldsOnly();
+    const metaDataProps = this.getOtherMetaDataFields();
+    const emailsObjects = this.getEmailsObjectsFromHeader(
+      messagingFields,
+      metaDataProps
+    );
+    return emailsObjects;
+  }
+  /**
+   * It takes the body of the email, converts it to a string, and then uses a regular expression to
+   * extract all the email addresses from the body
+   * @returns An array of objects.
+   */
+  extractEmailObjectsFromBody() {
+    if (Object.keys(this.body).length > 0) {
+      const emailsObjects = this.getEmailsObjectsFromBody(
+        this.body.toString('utf8')
+      );
+      return emailsObjects;
+    } else {
+      return [];
+    }
+  }
+  extractPhoneContact() {}
+}
+module.exports = EmailMessage;
 </code></pre>
-<h2>Usage</h2>
-<pre class="prettyprint source lang-bash"><code>
-$ usage
-$ usage
-
-</code></pre>
-<h2>Support</h2>
-<p>This app is provided for free as such with no guarantee nor support. For any kind of support, feel free to reach <a href="contact@ankaboot.fr">ankaboot professional services</a>.</p>
-<h2>Roadmap</h2>
-<p>For any requests concerning the roadmap, you could either have a look on issues or for any specific request contact <a href="contact@ankaboot.fr">ankaboot professional services</a>.</p>
-<h2>Contributing</h2>
-<p>Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.</p>
-<p>Please make sure to update tests as appropriate.</p>
-<h2>License</h2>
-<p><a href="https://www.gnu.org/licenses/agpl-3.0.en.html">GNU AGPL v3</a></p></article>
+        </article>
     </section>
-
-
 
 
 

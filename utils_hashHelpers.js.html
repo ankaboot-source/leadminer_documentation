@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Home - Documentation</title>
+    <title>utils/hashHelpers.js - Documentation</title>
 
     <script src="scripts/prettify/prettify.js"></script>
     <script src="scripts/prettify/lang-css.js"></script>
@@ -29,50 +29,34 @@
 
 <div id="main">
     
+    <h1 class="page-title">utils/hashHelpers.js</h1>
+    
 
     
 
 
 
     
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>const crypto = require('crypto');
+const secret = process.env.HASH_SECRET;
 
+/**
+ * It takes an email address, runs it through a cryptographic hash function, and returns the result
+ * @param emailAddress - The email address to hash.
+ * @returns A hash of the email address.
+ */
+function hashEmail(emailAddress) {
+  return crypto.createHmac('sha256', secret).update(emailAddress).digest('hex');
+}
 
-
-
-
-
-
-
-
-    
-
-
-    <section class="readme">
-        <article><p><a href="https://github.com/ankaboot-source/leadminer/actions/workflows/Deploy.yml"><img src="https://github.com/ankaboot-source/leadminer/actions/workflows/Deploy.yml/badge.svg?branch=main" alt="Build &amp; Deploy"></a></p>
-<h1>Leadminer</h1>
-<p>Leadminer is a NodeJS app to extract and qualify email addresses from your own mailboxes.</p>
-<h2>Installation</h2>
-<p>Use <a href="https://pip.pypa.io/en/stable/">app</a> to install leadminer.</p>
-<pre class="prettyprint source lang-bash"><code>command line installation
+module.exports = {
+  hashEmail,
+};
 </code></pre>
-<h2>Usage</h2>
-<pre class="prettyprint source lang-bash"><code>
-$ usage
-$ usage
-
-</code></pre>
-<h2>Support</h2>
-<p>This app is provided for free as such with no guarantee nor support. For any kind of support, feel free to reach <a href="contact@ankaboot.fr">ankaboot professional services</a>.</p>
-<h2>Roadmap</h2>
-<p>For any requests concerning the roadmap, you could either have a look on issues or for any specific request contact <a href="contact@ankaboot.fr">ankaboot professional services</a>.</p>
-<h2>Contributing</h2>
-<p>Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.</p>
-<p>Please make sure to update tests as appropriate.</p>
-<h2>License</h2>
-<p><a href="https://www.gnu.org/licenses/agpl-3.0.en.html">GNU AGPL v3</a></p></article>
+        </article>
     </section>
-
-
 
 
 

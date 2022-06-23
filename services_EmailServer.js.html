@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Home - Documentation</title>
+    <title>services/EmailServer.js - Documentation</title>
 
     <script src="scripts/prettify/prettify.js"></script>
     <script src="scripts/prettify/lang-css.js"></script>
@@ -29,50 +29,125 @@
 
 <div id="main">
     
+    <h1 class="page-title">services/EmailServer.js</h1>
+    
 
     
 
 
 
     
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>const Imap = require("imap");
+const logger = require("../utils/logger")(module);
+const hashHelpers = require("../utils/hashHelpers");
+const tokenHelpers = require("../utils/tokenHelpers");
+const GOOGLE_IMAP_HOST = process.env.GOOGLE_IMAP_HOST;
 
+class EmailServer {
+  #connection;
+  /**
+   * The constructor function is a special function that is called when a new object is created
+   * @param user - The user object that was passed to the constructor.
+   */
+  constructor(user) {
+    this.user = user;
+    this.mailHash = hashHelpers.hashEmail(user.email);
+  }
+  /**
+   * It returns an IMAP object that is used to connect to the user's email account
+   * @returns An Imap object
+   */
+  initConnection() {
+    logger.info(`Preparing imap connection for user : ${this.mailHash}`);
 
+    if (this.user.token) {
+      // the user is connected using api
+      this.#connection = new Imap({
+        user: this.user.email,
+        xoauth2: "",
+        host: GOOGLE_IMAP_HOST,
+        port: this.user.port || 993,
+        tls: true,
+        tlsOptions: {
+          port: this.user.port || 993,
+          host: GOOGLE_IMAP_HOST,
+          servername: GOOGLE_IMAP_HOST,
+        },
+        keepalive: false,
+      });
+      logger.info(
+        `API connection to imap server initiated for user: ${this.mailHash}`
+      );
+    }
+    if (this.user.password) {
+      // the user is connected using password
+      this.#connection = new Imap({
+        user: this.user.email,
+        password: this.user.password,
+        host: this.user.host,
+        port: this.user.port || 993,
+        tls: true,
+        connTimeout: process.env.CONNECTION_TIMEOUT,
+        keepalive: false,
+        authTimeout: process.env.AUTHENTICATION_TIMEOUT,
+        tlsOptions: {
+          port: this.user.port || 993,
+          host: this.user.host,
+          servername: this.user.host,
+        },
+      });
+      logger.info(
+        `IMAP connection to imap server initiated for user: ${this.mailHash}`
+      );
+    }
+  }
+  /**
+   * It kills the connection to the IMAP server
+   * @param imapConnetion - The connection object returned by the imap.connect() function.
+   */
+  killConnection() {
+    this.connection.destroy();
+    logger.info(
+      `Connection to imap server destroyed by user: ${this.mailHash}`
+    );
+  }
+  /**
+   * If the user has a token, return true, otherwise return false
+   * @returns A boolean value.
+   */
+  isApiConnection() {
+    if (this.user.token) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+  /**
+   * It connects to the IMAP server
+   * @returns A promise that resolves to the connection object.
+   */
+  async connecte() {
+    return new Promise(async (res, reject) => {
+      this.initConnection();
+      if (this.isApiConnection()) {
+        const tokens = await tokenHelpers.generateXOauthToken(this.user);
+        this.#connection._config.xoauth2 = tokens.xoauth2Token;
+        this.#connection.connect();
+        res(this.#connection);
+      } else {
+        this.#connection.connect();
+        res(this.#connection);
+      }
+    });
+  }
+}
 
-
-
-
-
-
-
-    
-
-
-    <section class="readme">
-        <article><p><a href="https://github.com/ankaboot-source/leadminer/actions/workflows/Deploy.yml"><img src="https://github.com/ankaboot-source/leadminer/actions/workflows/Deploy.yml/badge.svg?branch=main" alt="Build &amp; Deploy"></a></p>
-<h1>Leadminer</h1>
-<p>Leadminer is a NodeJS app to extract and qualify email addresses from your own mailboxes.</p>
-<h2>Installation</h2>
-<p>Use <a href="https://pip.pypa.io/en/stable/">app</a> to install leadminer.</p>
-<pre class="prettyprint source lang-bash"><code>command line installation
+module.exports = EmailServer;
 </code></pre>
-<h2>Usage</h2>
-<pre class="prettyprint source lang-bash"><code>
-$ usage
-$ usage
-
-</code></pre>
-<h2>Support</h2>
-<p>This app is provided for free as such with no guarantee nor support. For any kind of support, feel free to reach <a href="contact@ankaboot.fr">ankaboot professional services</a>.</p>
-<h2>Roadmap</h2>
-<p>For any requests concerning the roadmap, you could either have a look on issues or for any specific request contact <a href="contact@ankaboot.fr">ankaboot professional services</a>.</p>
-<h2>Contributing</h2>
-<p>Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.</p>
-<p>Please make sure to update tests as appropriate.</p>
-<h2>License</h2>
-<p><a href="https://www.gnu.org/licenses/agpl-3.0.en.html">GNU AGPL v3</a></p></article>
+        </article>
     </section>
-
-
 
 
 
